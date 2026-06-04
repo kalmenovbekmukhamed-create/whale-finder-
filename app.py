@@ -110,10 +110,12 @@ cells = "".join(
     f'<div class="kv" style="color:{col}">{val}</div></div>' for lbl, val, col in kpis)
 st.markdown(f"""
 <style>
-  .kpi-strip {{ display:flex; gap:0; border:1px solid rgba(125,249,255,.10);
+  .kpi-strip {{ display:flex; flex-wrap:wrap; gap:0;
+                border:1px solid rgba(125,249,255,.10);
                 border-radius:12px; background:rgba(13,19,32,.5); overflow:hidden;
                 margin:2px 0 6px; }}
-  .kpi {{ flex:1; padding:9px 14px; border-right:1px solid rgba(125,249,255,.07); }}
+  .kpi {{ flex:1 1 110px; padding:9px 14px;
+          border-right:1px solid rgba(125,249,255,.07); }}
   .kpi:last-child {{ border-right:none; }}
   .kl {{ color:#6f7990; font-size:9.5px; letter-spacing:.09em; font-weight:600; }}
   .kv {{ font-size:16px; font-weight:700; margin-top:3px;
@@ -368,6 +370,35 @@ overlay_html = f"""
   .alert-foot .k2 {{ color:{MUTE}; font-size:9.5px; }}
   .alert-foot .v {{ font-size:17px; font-weight:700; margin-top:2px;
                     font-variant-numeric:tabular-nums; }}
+
+  /* ---- phones: reflow the floating cards so nothing overlaps ---- */
+  @media (max-width: 640px) {{
+    .header-card {{ width:94%; padding:9px 13px 11px; top:8px; }}
+    .hc-top {{ font-size:10px; }}
+    .eyebrow {{ font-size:9px; letter-spacing:.32em; margin:6px 0 3px; }}
+    .title .l1, .title .l2 {{ font-size:18px; }}
+    .subtitle {{ font-size:9.5px; margin-top:4px; }}
+
+    .readout {{ display:none; }}              /* touch screens don't hover */
+
+    .pricetag {{ top:142px; left:12px; }}
+    .pricetag .p {{ font-size:18px; }}
+    .pricetag .c {{ font-size:11px; }}
+
+    .tracker {{ top:142px; right:8px; width:144px; padding:8px 11px; }}
+    .tr-head {{ font-size:9.5px; margin-bottom:7px; }}
+    .tr-row {{ font-size:11px; margin:5px 0; }}
+    .tr-foot {{ display:none; }}
+
+    .alert-card {{ left:10px; right:10px; width:auto; bottom:50px; padding:12px 14px; }}
+    .alert-body {{ font-size:11.5px; margin:9px 0; }}
+    .alert-foot {{ gap:22px; }}
+
+    .chips {{ bottom:12px; gap:5px; }}
+    .chip {{ font-size:10px; padding:3px 10px; }}
+
+    .whale-glow {{ width:24px; height:24px; }}
+  }}
 </style></head>
 <body>
   <div id="stage">
