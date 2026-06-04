@@ -327,6 +327,16 @@ overlay_html = f"""
   .chip:hover {{ border-color:rgba(125,249,255,.4); color:#c4ccda; }}
   .chip.on {{ color:#0a0a12; background:{CYAN}; border-color:{CYAN}; font-weight:600; }}
 
+  /* ---- zoom controls (mobile only — desktop uses wheel/drag) ---- */
+  .zoomctl {{ position:absolute; right:7px; top:50%; transform:translateY(-50%);
+              display:none; flex-direction:column; gap:7px; pointer-events:auto;
+              z-index:6; }}
+  .zoomctl button {{ width:34px; height:34px; border-radius:9px; color:#dbe2ee;
+                     background:rgba(10,15,26,.78); border:1px solid rgba(125,249,255,.20);
+                     font-size:18px; line-height:1; display:grid; place-items:center;
+                     cursor:pointer; -webkit-tap-highlight-color:transparent; }}
+  .zoomctl button:active {{ background:rgba(125,249,255,.18); }}
+
   /* ---- selected-whale glow ring ---- */
   .whale-glow {{ position:absolute; width:30px; height:30px; border-radius:50%;
                  border:2px solid {CYAN}; transform:translate(-50%,-50%);
@@ -398,6 +408,8 @@ overlay_html = f"""
     .chip {{ font-size:10px; padding:3px 10px; }}
 
     .whale-glow {{ width:24px; height:24px; }}
+
+    .zoomctl {{ display:flex; }}   /* show zoom buttons on phones */
   }}
 </style></head>
 <body>
@@ -448,6 +460,12 @@ overlay_html = f"""
         <span class="chip" data-layer="vwap" onclick="toggleChip(this)">VWAP</span>
         <span class="chip on" data-layer="vprofile" onclick="toggleChip(this)">Профиль</span>
         <span class="chip on" data-layer="whale" onclick="toggleChip(this)">Киты</span>
+      </div>
+
+      <div class="zoomctl">
+        <button onclick="zoomX(0.6)" aria-label="zoom in">+</button>
+        <button onclick="zoomX(1.7)" aria-label="zoom out">&minus;</button>
+        <button onclick="resetZoom()" aria-label="reset">⤢</button>
       </div>
     </div>
   </div>
@@ -555,6 +573,11 @@ overlay_html = f"""
         if (p) renderReadout(CANDLES[p.pointNumber]);
       }});
       gd.on("plotly_relayout", positionGlow);   // keep the ring on the dot when zooming/panning
+      // On phones, let finger-swipes scroll the PAGE (don't hijack into chart pan);
+      // zooming is handled by the on-screen buttons instead.
+      if (window.innerWidth <= 640 && gd._fullLayout && gd._fullLayout.dragmode !== false) {{
+        window.Plotly.relayout(gd, {{ dragmode: false }});
+      }}
       positionGlow();
       return true;
     }}
@@ -577,6 +600,28 @@ overlay_html = f"""
         if (on) positionGlow();
         else document.getElementById("whaleGlow").style.display = "none";
       }}
+    }}
+
+    // Reliable zoom buttons (mobile) — pinch is flaky in an iframe, so we drive
+    // the time axis directly with a smooth animation, like a trading terminal.
+    function toMs(v) {{ return (typeof v === "number") ? v : new Date(v).getTime(); }}
+    function zoomX(factor) {{
+      var gd = document.querySelector(".plotly-graph-div");
+      if (!gd || !window.Plotly || !gd._fullLayout) return;
+      var xa = gd._fullLayout.xaxis;
+      var lo = toMs(xa.range[0]), hi = toMs(xa.range[1]), span = hi - lo;
+      if (!span) return;
+      var anchor = hi - span * 0.12;            // keep the latest candles in view
+      var ns = span * factor;
+      window.Plotly.relayout(gd,
+        {{ "xaxis.range": [anchor - ns * 0.88, anchor + ns * 0.12] }});
+      setTimeout(positionGlow, 80);
+    }}
+    function resetZoom() {{
+      var gd = document.querySelector(".plotly-graph-div");
+      if (!gd || !window.Plotly) return;
+      window.Plotly.relayout(gd, {{ "xaxis.autorange": true, "yaxis.autorange": true }});
+      setTimeout(positionGlow, 120);
     }}
 
     function wfFit() {{
