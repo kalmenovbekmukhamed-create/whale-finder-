@@ -269,6 +269,38 @@ def whale_backtest(df, horizon=3):
     }
 
 
+def price_time_heatmap(df, bins=90):
+    """
+    Bookmap-style volume heatmap: spread each candle's REAL traded volume across
+    its [low, high] price range, over time. Hot bands show price levels that
+    traded heavily. Honest note: this is traded volume distributed across the
+    candle range — NOT live order-book liquidity (no free order book for XAUT).
+    """
+    lo = float(df["low"].min())
+    hi = float(df["high"].max())
+    if hi <= lo:
+        hi = lo + 1.0
+    edges = np.linspace(lo, hi, bins + 1)
+    centers = (edges[:-1] + edges[1:]) / 2.0
+
+    lows = df["low"].to_numpy()
+    highs = df["high"].to_numpy()
+    vols = df["volume"].to_numpy()
+    n = len(df)
+    z = np.zeros((bins, n))
+    for j in range(n):
+        l, h, v = lows[j], highs[j], vols[j]
+        i0 = int(np.clip(np.searchsorted(edges, l, side="right") - 1, 0, bins - 1))
+        i1 = int(np.clip(np.searchsorted(edges, h, side="right") - 1, 0, bins - 1))
+        k = max(1, i1 - i0 + 1)
+        z[i0:i1 + 1, j] += v / k          # spread volume evenly across the range
+
+    # saturate the colour scale at a percentile so hot bands read clearly
+    pos = z[z > 0]
+    zmax = float(np.percentile(pos, 82)) if pos.size else 1.0
+    return {"z": z.tolist(), "prices": centers.tolist(), "zmax": zmax}
+
+
 if __name__ == "__main__":
     for tf in TIMEFRAMES:
         d = build_frame(tf)

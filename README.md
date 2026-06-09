@@ -45,6 +45,13 @@ or just double-click **start.bat**. Opens at http://localhost:8533
   *"is this better than chance?"* honestly. **Descriptive hindsight on real
   data — not a prediction, not causal; small samples weaken the conclusion.**
 
+- **Volume heatmap ("Карта" chip)** — Bookmap-style price × time heat: each
+  candle's real traded volume spread across its range, so heavy price levels glow
+  hot. A volume map, **not** order-book liquidity (no free order book for XAUT).
+- **Whale Activity Heatmap** — weekday × hour-of-day grid (UTC) over ~60 days:
+  colour = total traded volume, numbers = whale events. Reveals when big players
+  are most active (London/NY session hotspots).
+
 ## Methodology (the honest core)
 
 | Number | How it's computed |

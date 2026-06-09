@@ -138,6 +138,16 @@ def build_figure(df, vp_price, vp_vol, spikes_df):
         specs=[[{"type": "candlestick"}, {"type": "bar"}]],
     )
 
+    # Bookmap-style volume heatmap (behind the candles; toggled by the "Карта" chip)
+    hm2 = wf.price_time_heatmap(df, bins=64)
+    fig.add_trace(go.Heatmap(
+        x=df["time"], y=hm2["prices"], z=hm2["z"], zsmooth="fast",
+        zmin=0, zmax=hm2["zmax"],
+        colorscale=[[0.0, "rgba(7,11,22,0)"], [0.10, "#0a2a55"], [0.30, "#1668c4"],
+                    [0.52, "#21c0d8"], [0.74, "#ff5a1f"], [1.0, "#ffe24a"]],
+        showscale=False, hoverinfo="skip", meta="heat", visible=False,
+    ), row=1, col=1)
+
     # candles
     fig.add_trace(go.Candlestick(
         x=df["time"], open=df["open"], high=df["high"],
@@ -489,6 +499,8 @@ overlay_html = f"""
       <div class="card alert-card" id="alertCard"></div>
 
       <div class="chips" id="chips">
+        <span class="chip" data-layer="heat" onclick="toggleChip(this)"
+              title="объём по цене во времени — не биржевой стакан">Карта</span>
         <span class="chip on" data-layer="ema" onclick="toggleChip(this)">EMA</span>
         <span class="chip" data-layer="vwap" onclick="toggleChip(this)">VWAP</span>
         <span class="chip on" data-layer="vprofile" onclick="toggleChip(this)">Профиль</span>
@@ -602,7 +614,8 @@ overlay_html = f"""
         }}
       }});
       gd.on("plotly_hover", function(e) {{
-        var p = (e.points || []).find(function(pt) {{ return pt.curveNumber === 0; }});
+        var p = (e.points || []).find(function(pt) {{
+          return pt.data && pt.data.type === "candlestick"; }});
         if (p) renderReadout(CANDLES[p.pointNumber]);
       }});
       gd.on("plotly_relayout", positionGlow);   // keep the ring on the dot when zooming/panning
@@ -744,7 +757,9 @@ st.markdown(f"""
   real per-candle traded volume, <b>not</b> a proxy. A "whale" is an interval whose volume
   is both ≥ 2.5× the rolling median <i>and</i> a robust z-score ≥ 2.5 above typical (median+MAD).
   Buy/sell pressure is volume weighted by the Close Location Value — where the close sits inside
-  each candle's range. This is one exchange's flow, not a consolidated order book, and no dollar
-  figures are invented. · {s['n_spikes']} whale events in view · refreshed {updated}
+  each candle's range. The heatmap ("Карта") spreads each candle's real traded volume across its
+  price range — a volume map, <b>not</b> live order-book liquidity. This is one exchange's flow,
+  not a consolidated order book, and no dollar figures are invented.
+  · {s['n_spikes']} whale events in view · refreshed {updated}
 </div>
 """, unsafe_allow_html=True)
