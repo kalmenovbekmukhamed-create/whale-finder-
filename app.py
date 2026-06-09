@@ -53,6 +53,11 @@ def load(tf, spike_mult, z_min):
     return df, wf.summarize(df), wf.volume_profile(df)
 
 
+@st.cache_data(ttl=900, show_spinner=False)
+def load_heatmap(spike_mult, z_min):
+    return wf.whale_heatmap(days_back=60, spike_mult=spike_mult, z_min=z_min)
+
+
 # --------------------------------------------------------------- controls ---
 c1, c2, c3, c4, c5 = st.columns([1.45, 1.8, 1.05, 0.85, 0.95])
 with c1:
@@ -230,6 +235,34 @@ def build_figure(df, vp_price, vp_vol, spikes_df):
     fig.update_yaxes(row=1, col=1, gridcolor=grid, showticklabels=False)
     fig.update_yaxes(row=1, col=2, side="right", showticklabels=True,
                      gridcolor="rgba(0,0,0,0)", color=MUTE, tickformat=",.0f")
+    return fig
+
+
+def build_heatmap(hm):
+    """Weekday × hour-of-day grid — colour = volume, numbers = whale count."""
+    whales = hm["whales"]
+    text = [[str(c) if c > 0 else "" for c in row] for row in whales]
+    fig = go.Figure(go.Heatmap(
+        z=hm["z"], x=[f"{h:02d}" for h in hm["hours"]], y=hm["days"],
+        customdata=whales, text=text,
+        texttemplate="%{text}", textfont=dict(size=9, color="#e8ecf4"),
+        colorscale=[[0, "rgba(125,249,255,0.03)"], [0.25, "#15506a"],
+                    [0.6, "#2f8fa3"], [1, GOLD]],
+        hovertemplate="%{y} · %{x}:00 UTC<br>объём %{z:,.0f} · китов "
+                      "%{customdata}<extra></extra>",
+        xgap=2, ygap=2,
+        colorbar=dict(thickness=9, len=0.92, outlinewidth=0,
+                      tickfont=dict(color=MUTE, size=8)),
+    ))
+    fig.update_layout(
+        height=300, margin=dict(l=8, r=8, t=6, b=6),
+        paper_bgcolor=BG, plot_bgcolor=BG, font=dict(color=MUTE, size=10),
+        yaxis=dict(autorange="reversed"),   # Пн at the top
+    )
+    fig.update_xaxes(tickfont=dict(color=MUTE, size=9), fixedrange=True,
+                     gridcolor="rgba(0,0,0,0)")
+    fig.update_yaxes(tickfont=dict(color=MUTE, size=11), fixedrange=True,
+                     gridcolor="rgba(0,0,0,0)")
     return fig
 
 
@@ -686,6 +719,21 @@ st.markdown(f"""
 {bt_html}
 <div class="bt-note">{bt_note}</div>
 """, unsafe_allow_html=True)
+
+# --- whale activity heatmap — when do the big players move? -----------------
+try:
+    hm = load_heatmap(spike_mult, z_min)
+except Exception:
+    hm = None
+if hm and hm["n_candles"]:
+    st.markdown(
+        f'<div class="bt-head">🔥 КАРТА АКТИВНОСТИ КИТОВ · ВРЕМЯ (UTC)</div>'
+        f'<div class="bt-note">Цвет — суммарный объём, числа — события-киты, '
+        f'по дню недели и часу (UTC). Последние {hm["span_days"]:.0f} дней · '
+        f'{hm["n_whales"]} китов. Ярче = горячее (сессии Лондона/Нью-Йорка).</div>',
+        unsafe_allow_html=True)
+    st.plotly_chart(build_heatmap(hm), use_container_width=True,
+                    config={"displayModeBar": False})
 
 # ------------------------------------------------------------------ foot ----
 updated = dt.datetime.utcnow().strftime("%H:%M:%S UTC")

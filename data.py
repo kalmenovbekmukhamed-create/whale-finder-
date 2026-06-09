@@ -76,8 +76,11 @@ def fetch_candles(tf_key="30m"):
 
 def build_frame(tf_key="1D", spike_mult=2.5, z_min=2.5, ema_period=12, win=14):
     """Candles + EMA + buy/sell pressure + robust whale-spike detection."""
-    df = fetch_candles(tf_key)
+    return _annotate(fetch_candles(tf_key), spike_mult, z_min, ema_period, win)
 
+
+def _annotate(df, spike_mult=2.5, z_min=2.5, ema_period=12, win=14):
+    """Add CLV pressure, EMA, robust volume baseline and whale-spike flags."""
     # --- where does the close sit in the candle? (Close Location Value) ------
     rng = (df["high"] - df["low"]).replace(0, np.nan)
     df["clv"] = ((df["close"] - df["low"]) / rng).fillna(0.5).clip(0, 1)  # 0=sold off, 1=bought up
@@ -179,6 +182,45 @@ def _wilson_ci(k, n, z=1.96):
     center = (p + z * z / (2 * n)) / d
     half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
     return (max(0.0, center - half), min(1.0, center + half))
+
+
+WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
+
+def whale_heatmap(days_back=60, spike_mult=2.5, z_min=2.5):
+    """
+    When are the whales active? Pulls ~days_back of hourly XAUT candles, runs the
+    same whale detection, and buckets everything into a weekday × hour-of-day grid
+    (UTC). Returns total traded volume per cell (the colour) and whale-event count
+    per cell (the numbers) — so you can see the London/NY session hotspots.
+    """
+    limit = int(min(days_back * 24, 5000))
+    url = f"{BFX}/candles/trade:1h:{SYMBOL}/hist"
+    rows = _get(url, {"limit": limit, "sort": -1})
+    df = pd.DataFrame(rows, columns=["t", "open", "close", "high", "low", "volume"])
+    df["time"] = pd.to_datetime(df["t"], unit="ms", utc=True)
+    df = _annotate(df.sort_values("t").reset_index(drop=True), spike_mult, z_min)
+
+    df["wd"] = df["time"].dt.dayofweek          # 0 = Monday
+    df["hr"] = df["time"].dt.hour
+
+    full_idx, full_cols = range(7), range(24)
+    vol = (df.pivot_table(index="wd", columns="hr", values="volume",
+                          aggfunc="sum", fill_value=0.0)
+             .reindex(index=full_idx, columns=full_cols, fill_value=0.0))
+    whales = (df[df["spike"]].pivot_table(index="wd", columns="hr", values="spike",
+                                          aggfunc="count", fill_value=0)
+              .reindex(index=full_idx, columns=full_cols, fill_value=0))
+
+    return {
+        "z": vol.values.tolist(),                        # colour = volume
+        "whales": whales.astype(int).values.tolist(),    # numbers = whale count
+        "hours": list(full_cols),
+        "days": WEEKDAYS_RU,
+        "n_candles": int(len(df)),
+        "n_whales": int(df["spike"].sum()),
+        "span_days": round(len(df) / 24, 1),
+    }
 
 
 def whale_backtest(df, horizon=3):
