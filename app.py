@@ -260,6 +260,14 @@ def build_figure(df, vp_price, vp_vol, spikes_df, layers):
         bgcolor=GOLD, bordercolor=GOLD, borderpad=2,
     )
 
+    # brand watermark — rides along in any screenshot or PNG export
+    fig.add_annotation(
+        xref="paper", yref="paper", x=0.012, y=0.03,
+        xanchor="left", yanchor="bottom", showarrow=False,
+        text="🐋 Bit_Generation · Whale Finder · XAUT/USD",
+        font=dict(color="rgba(245,237,220,0.30)", size=11),
+    )
+
     grid = "rgba(245,245,255,0.05)"
     fig.update_layout(
         height=720, margin=dict(l=8, r=58, t=8, b=24),
@@ -414,6 +422,15 @@ overlay_html = f"""
   .chip:hover {{ border-color:rgba(125,249,255,.4); color:#c4ccda; }}
   .chip.on {{ color:#0a0a12; background:{CYAN}; border-color:{CYAN}; font-weight:600; }}
 
+  /* ---- snapshot button (top-right) ---- */
+  .snapbtn {{ position:absolute; top:10px; right:12px; pointer-events:auto; z-index:7;
+              width:32px; height:32px; border-radius:9px; cursor:pointer;
+              background:rgba(10,15,26,.72); border:1px solid rgba(125,249,255,.20);
+              color:#dbe2ee; font-size:15px; line-height:1; display:grid;
+              place-items:center; -webkit-tap-highlight-color:transparent; }}
+  .snapbtn:hover {{ border-color:rgba(125,249,255,.45); }}
+  .snapbtn:active {{ background:rgba(125,249,255,.18); }}
+
   /* ---- zoom controls (mobile only — desktop uses wheel/drag) ---- */
   .zoomctl {{ position:absolute; right:7px; top:50%; transform:translateY(-50%);
               display:none; flex-direction:column; gap:7px; pointer-events:auto;
@@ -536,6 +553,8 @@ overlay_html = f"""
         </div>
         <div class="tr-foot">доля объёма по силе покупок/продаж (CLV)</div>
       </div>
+
+      <button class="snapbtn" onclick="snapshot()" title="Сохранить картинку для шеринга">📸</button>
 
       <div class="readout" id="readout"></div>
 
@@ -695,6 +714,22 @@ overlay_html = f"""
       if (!gd || !window.Plotly) return;
       window.Plotly.relayout(gd, {{ "xaxis.autorange": true, "yaxis.autorange": true }});
       setTimeout(positionGlow, 120);
+    }}
+
+    // Branded PNG of the current chart (whatever layers/whales are showing).
+    // Tries a direct download; falls back to opening the image in a new tab
+    // (best for phones — long-press to save/share).
+    function snapshot() {{
+      var gd = document.querySelector(".plotly-graph-div");
+      if (!gd || !window.Plotly) return;
+      var opt = {{ format: "png", width: 1280, height: 720, scale: 2,
+                   filename: "whale-finder-xaut" }};
+      window.Plotly.downloadImage(gd, opt).catch(function() {{
+        window.Plotly.toImage(gd, opt).then(function(url) {{
+          var w = window.open();
+          if (w) w.document.write('<img src="' + url + '" style="max-width:100%">');
+        }});
+      }});
     }}
 
     function wfFit() {{
