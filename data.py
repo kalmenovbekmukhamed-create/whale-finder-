@@ -269,12 +269,15 @@ def whale_backtest(df, horizon=3):
     }
 
 
-def price_time_heatmap(df, bins=90):
+def price_time_heatmap(df, bins=64, window=None):
     """
-    Bookmap-style volume heatmap: spread each candle's REAL traded volume across
-    its [low, high] price range, over time. Hot bands show price levels that
-    traded heavily. Honest note: this is traded volume distributed across the
-    candle range — NOT live order-book liquidity (no free order book for XAUT).
+    Bookmap-style volume heatmap of HORIZONTAL liquidity bands. Each candle's real
+    traded volume is spread across its [low, high] price range, then accumulated
+    over a rolling time window — so a price level that keeps trading glows as a
+    horizontal stripe across time (the classic Bookmap look).
+
+    Honest note: this is traded volume by price over time — NOT live order-book
+    liquidity (no free order book for XAUT).
     """
     lo = float(df["low"].min())
     hi = float(df["high"].max())
@@ -287,13 +290,23 @@ def price_time_heatmap(df, bins=90):
     highs = df["high"].to_numpy()
     vols = df["volume"].to_numpy()
     n = len(df)
-    z = np.zeros((bins, n))
+
+    # per-candle contribution: volume spread across that candle's price range
+    contrib = np.zeros((bins, n))
     for j in range(n):
-        l, h, v = lows[j], highs[j], vols[j]
-        i0 = int(np.clip(np.searchsorted(edges, l, side="right") - 1, 0, bins - 1))
-        i1 = int(np.clip(np.searchsorted(edges, h, side="right") - 1, 0, bins - 1))
+        i0 = int(np.clip(np.searchsorted(edges, lows[j], side="right") - 1, 0, bins - 1))
+        i1 = int(np.clip(np.searchsorted(edges, highs[j], side="right") - 1, 0, bins - 1))
         k = max(1, i1 - i0 + 1)
-        z[i0:i1 + 1, j] += v / k          # spread volume evenly across the range
+        contrib[i0:i1 + 1, j] += vols[j] / k
+
+    # accumulate over a trailing window → horizontal bands at persistent levels
+    if window is None:
+        window = max(10, n // 3)
+    csum = np.cumsum(contrib, axis=1)
+    z = np.zeros_like(contrib)
+    for j in range(n):
+        prev = j - window
+        z[:, j] = csum[:, j] - (csum[:, prev] if prev >= 0 else 0.0)
 
     # saturate the colour scale at a percentile so hot bands read clearly
     pos = z[z > 0]
