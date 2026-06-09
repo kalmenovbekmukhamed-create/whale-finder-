@@ -86,6 +86,12 @@ with c5:
     if st.button("↻ Refresh", use_container_width=True):
         st.cache_data.clear()
 
+# layer toggles — Streamlit pills so the choice PERSISTS across LIVE refreshes
+layer_sel = st.pills(
+    "Слои", ["Карта", "EMA", "VWAP", "Профиль", "Киты"], selection_mode="multi",
+    default=["EMA", "Профиль", "Киты"], label_visibility="collapsed", key="layers")
+layer_sel = set(layer_sel or [])
+
 if live:
     st_autorefresh(interval=5000, key="wf_tick")
 
@@ -131,21 +137,26 @@ st.markdown(f"""
 
 
 # --------------------------------------------------------------- figure -----
-def build_figure(df, vp_price, vp_vol, spikes_df):
+def build_figure(df, vp_price, vp_vol, spikes_df, layers):
+    show_heat = "Карта" in layers
+    show_ema = "EMA" in layers
+    show_vwap = "VWAP" in layers
+    show_whale = "Киты" in layers
+    show_vp = "Профиль" in layers
     fig = make_subplots(
         rows=1, cols=2, column_widths=[0.86, 0.14],
         shared_yaxes=True, horizontal_spacing=0.004,
         specs=[[{"type": "candlestick"}, {"type": "bar"}]],
     )
 
-    # Bookmap-style volume heatmap (behind the candles; toggled by the "Карта" chip)
+    # Bookmap-style volume heatmap (behind the candles; toggled by the "Карта" pill)
     hm2 = wf.price_time_heatmap(df, bins=64)
     fig.add_trace(go.Heatmap(
         x=df["time"], y=hm2["prices"], z=hm2["z"], zsmooth="fast",
         zmin=0, zmax=hm2["zmax"],
         colorscale=[[0.0, "rgba(7,11,22,0)"], [0.10, "#0a2a55"], [0.30, "#1668c4"],
                     [0.52, "#21c0d8"], [0.74, "#ff5a1f"], [1.0, "#ffe24a"]],
-        showscale=False, hoverinfo="skip", meta="heat", visible=False,
+        showscale=False, hoverinfo="skip", meta="heat", visible=show_heat,
     ), row=1, col=1)
 
     # candles
@@ -162,7 +173,7 @@ def build_figure(df, vp_price, vp_vol, spikes_df):
     fig.add_trace(go.Scatter(
         x=df["time"], y=df["ema"], mode="lines",
         line=dict(color=GOLD, width=1.6),
-        opacity=0.9, name="EMA12", meta="ema", hoverinfo="skip",
+        opacity=0.9, name="EMA12", meta="ema", hoverinfo="skip", visible=show_ema,
     ), row=1, col=1)
 
     # VWAP — volume-weighted fair value (off by default, toggle via chip)
@@ -172,7 +183,7 @@ def build_figure(df, vp_price, vp_vol, spikes_df):
     fig.add_trace(go.Scatter(
         x=df["time"], y=vwap, mode="lines",
         line=dict(color="#b18cff", width=1.4, dash="dot"),
-        opacity=0.9, name="VWAP", meta="vwap", hoverinfo="skip", visible=False,
+        opacity=0.9, name="VWAP", meta="vwap", hoverinfo="skip", visible=show_vwap,
     ), row=1, col=1)
 
     # whale signal circles — clickable. green = buy pressure, red = sell.
@@ -193,12 +204,12 @@ def build_figure(df, vp_price, vp_vol, spikes_df):
                             line=dict(color=color, width=2)),
                 customdata=cdata,
                 hovertemplate="кит · %{customdata[1]:.1f}× · клик<extra></extra>",
-                showlegend=False,
+                showlegend=False, visible=show_whale,
             ), row=1, col=1)
             fig.add_trace(go.Scatter(
                 x=sub["time"], y=yv, mode="markers", meta="whale",
                 marker=dict(symbol="circle", size=5, color=color),
-                customdata=cdata, hoverinfo="skip", showlegend=False,
+                customdata=cdata, hoverinfo="skip", showlegend=False, visible=show_whale,
             ), row=1, col=1)
 
     # volume profile — activity by price level, hugging the right edge
@@ -208,7 +219,7 @@ def build_figure(df, vp_price, vp_vol, spikes_df):
         x=vp_vol, y=vp_price, orientation="h",
         marker=dict(color=bar_colors, line=dict(width=0)),
         hovertemplate="$%{y:,.0f} · activity %{x:,.0f}<extra></extra>",
-        showlegend=False, meta="vprofile",
+        showlegend=False, meta="vprofile", visible=show_vp,
     ), row=1, col=2)
 
     # current-price marker line + the yellow price tag on the right axis
@@ -303,7 +314,7 @@ candles = [{
 } for r in df.itertuples()]
 candles_json = json.dumps(candles, ensure_ascii=False)
 
-fig = build_figure(df, vp_price, vp_vol, spikes_df)
+fig = build_figure(df, vp_price, vp_vol, spikes_df, layer_sel)
 plot_div = pio.to_html(fig, include_plotlyjs="cdn", full_html=False,
                        default_width="100%", default_height="720px",
                        config={"displayModeBar": False, "responsive": True,
@@ -311,6 +322,7 @@ plot_div = pio.to_html(fig, include_plotlyjs="cdn", full_html=False,
 
 
 # --------------------------------------------------------------- overlays ---
+whales_on = "true" if "Киты" in layer_sel else "false"
 overlay_html = f"""
 <!doctype html><html><head><meta charset="utf-8">
 <style>
@@ -498,15 +510,6 @@ overlay_html = f"""
 
       <div class="card alert-card" id="alertCard"></div>
 
-      <div class="chips" id="chips">
-        <span class="chip" data-layer="heat" onclick="toggleChip(this)"
-              title="объём по цене во времени — не биржевой стакан">Карта</span>
-        <span class="chip on" data-layer="ema" onclick="toggleChip(this)">EMA</span>
-        <span class="chip" data-layer="vwap" onclick="toggleChip(this)">VWAP</span>
-        <span class="chip on" data-layer="vprofile" onclick="toggleChip(this)">Профиль</span>
-        <span class="chip on" data-layer="whale" onclick="toggleChip(this)">Киты</span>
-      </div>
-
       <div class="zoomctl">
         <button onclick="zoomX(0.6)" aria-label="zoom in">+</button>
         <button onclick="zoomX(1.7)" aria-label="zoom out">&minus;</button>
@@ -519,6 +522,7 @@ overlay_html = f"""
     var WHALES = {events_json};
     var CANDLES = {candles_json};
     var selectedEid = WHALES.length ? WHALES.length - 1 : null;
+    var whalesOn = {whales_on};
 
     function money(n) {{ return n.toLocaleString("en-US",
       {{minimumFractionDigits:2, maximumFractionDigits:2}}); }}
@@ -529,7 +533,7 @@ overlay_html = f"""
       if (!g) return;
       var gd = document.querySelector(".plotly-graph-div");
       var w = (selectedEid != null) ? WHALES[selectedEid] : null;
-      if (!w || !gd || !gd._fullLayout || !gd._fullLayout.xaxis.c2p) {{
+      if (!whalesOn || !w || !gd || !gd._fullLayout || !gd._fullLayout.xaxis.c2p) {{
         g.style.display = "none"; return;
       }}
       var xa = gd._fullLayout.xaxis, ya = gd._fullLayout.yaxis;
@@ -628,25 +632,7 @@ overlay_html = f"""
       return true;
     }}
 
-    // Show/hide a chart layer by its trace `meta` tag — instant, no reload.
-    function toggleLayer(tag, on) {{
-      var gd = document.querySelector(".plotly-graph-div");
-      if (!gd || !window.Plotly) return;
-      var idx = [];
-      (gd.data || []).forEach(function(t, i) {{ if (t.meta === tag) idx.push(i); }});
-      if (idx.length) window.Plotly.restyle(gd, {{ visible: on ? true : false }}, idx);
-    }}
-
-    function toggleChip(el) {{
-      var on = !el.classList.contains("on");
-      el.classList.toggle("on", on);
-      var layer = el.getAttribute("data-layer");
-      toggleLayer(layer, on);
-      if (layer === "whale") {{
-        if (on) positionGlow();
-        else document.getElementById("whaleGlow").style.display = "none";
-      }}
-    }}
+    // layer visibility is controlled by Streamlit pills, baked into the figure
 
     // Reliable zoom buttons (mobile) — pinch is flaky in an iframe, so we drive
     // the time axis directly with a smooth animation, like a trading terminal.
