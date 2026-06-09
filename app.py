@@ -346,6 +346,10 @@ overlay_html = f"""
   .live {{ display:inline-flex; align-items:center; gap:6px; color:{RED};
            border:1px solid rgba(255,77,94,.5); border-radius:20px;
            padding:3px 11px; font-weight:600; letter-spacing:.1em; font-size:10.5px; }}
+  .hc-right {{ display:inline-flex; align-items:center; gap:9px; }}
+  .cx {{ background:none; border:none; color:{MUTE}; font-size:16px; line-height:1;
+         cursor:pointer; padding:0 1px; }}
+  .cx:hover {{ color:{INK}; }}
   .live .blip {{ width:7px;height:7px;border-radius:50%;background:{RED};
                  box-shadow:0 0 8px {RED}; animation:pulse 1.4s infinite; }}
   @keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:.3}} }}
@@ -360,7 +364,8 @@ overlay_html = f"""
   .tracker {{ position:absolute; top:150px; right:74px; width:208px;
               padding:13px 15px; }}
   .tr-head {{ color:{INK}; font-size:12px; font-weight:700; letter-spacing:.04em;
-              display:flex; align-items:center; gap:7px; margin-bottom:11px; }}
+              display:flex; align-items:center; gap:7px; margin-bottom:11px;
+              padding-right:14px; }}
   .tr-head .gem {{ color:{CYAN}; }}
   .tr-row {{ display:flex; justify-content:space-between; align-items:center;
              font-size:13px; margin:7px 0; }}
@@ -473,10 +478,13 @@ overlay_html = f"""
     <div id="whaleGlow" class="whale-glow"></div>
     <div class="hud">
 
-      <div class="card header-card">
+      <div class="card header-card" id="headerCard">
         <div class="hc-top">
           <span class="brand"><span class="dot">●</span> Bit_Generation</span>
-          <span class="live"><span class="blip"></span> LIVE</span>
+          <span class="hc-right">
+            <span class="live"><span class="blip"></span> LIVE</span>
+            <button class="cx" title="скрыть" onclick="closeCard('headerCard')">×</button>
+          </span>
         </div>
         <div class="eyebrow">— ТРЕЙДИНГ —</div>
         <div class="title"><span class="l1">КИТТЕРМЕН БІРГЕ</span><br>
@@ -484,7 +492,8 @@ overlay_html = f"""
         <div class="subtitle">Алтындағы киттердің сделкаларын бақыла</div>
       </div>
 
-      <div class="card tracker">
+      <div class="card tracker" id="trackerCard">
+        <button class="x" title="скрыть" onclick="closeCard('trackerCard')">×</button>
         <div class="tr-head"><span class="gem">◇</span> ІРІ ОЙЫНШЫ · BIG PLAYER</div>
         <div class="tr-row">
           <span class="lab"><span class="d" style="background:{GREEN}"></span> BUY</span>
@@ -569,6 +578,11 @@ overlay_html = f"""
       if (card) card.style.display = "none";
       selectedEid = null;
       positionGlow();
+    }}
+
+    function closeCard(id) {{
+      var el = document.getElementById(id);
+      if (el) el.style.display = "none";
     }}
 
     // Build the alert card for one whale event (or the quiet state) and show it.
