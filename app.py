@@ -79,6 +79,15 @@ with c3:
                                "должен быть объём.")
         horizon = st.slider("Горизонт бэктеста (свечей)", 1, 10, 3, 1,
                             help="Через сколько свечей после кита проверяем цену.")
+        st.markdown("---")
+        tpsl_dir = st.radio("TP/SL*: сценарий", ["Авто (по киту)", "Лонг", "Шорт"],
+                            horizontal=True,
+                            help="Авто — направление последнего кита.")
+        sl_mult = st.slider("SL: × ATR(14)", 1.0, 3.0, 1.5, 0.25,
+                            help="Стоп ближе ~1.5×ATR статистически выбивается "
+                                 "обычным шумом.")
+        tp_mult = st.slider("TP: × ATR(14)", 1.5, 5.0, 2.5, 0.25,
+                            help="Цель за пределами типичного диапазона свечи.")
 with c4:
     live = st.toggle("● LIVE 5s", value=False,
                      help="Авто-обновление каждые 5с. Сбрасывает зум и выбранного кита.")
@@ -88,7 +97,8 @@ with c5:
 
 # layer toggles — Streamlit pills so the choice PERSISTS across LIVE refreshes
 layer_sel = st.pills(
-    "Слои", ["Карта", "EMA", "VWAP", "Профиль", "Киты"], selection_mode="multi",
+    "Слои", ["Карта", "EMA", "VWAP", "Профиль", "Киты", "TP/SL*"],
+    selection_mode="multi",
     default=["EMA", "Профиль", "Киты"], label_visibility="collapsed", key="layers")
 layer_sel = set(layer_sel or [])
 
@@ -110,6 +120,11 @@ with st.expander("❔ Как это работает · честная мето�
 
 **Карта активности (день × час).** Когда киты активнее всего по времени (UTC) —
 видны сессии Лондона и Нью-Йорка.
+
+**TP/SL*.** Звёздочка — не случайно: это **зоны волатильности из ATR(14)**
+(средний реальный ход одной свечи), а не сигнал. SL — на расстоянии, которое
+обычный шум проходит сам; TP — за пределами типичного диапазона. Направление
+(лонг/шорт) задаёте вы или берётся у последнего кита. **Не торговая рекомендация.**
 
 **Бэктест и значимость.** Проверяем, куда пошла цена через N свечей после кита, и
 тестируем результат **биномиальным тестом против 50%** с доверительным интервалом.
@@ -164,7 +179,7 @@ st.markdown(f"""
 
 
 # --------------------------------------------------------------- figure -----
-def build_figure(df, vp_price, vp_vol, spikes_df, layers):
+def build_figure(df, vp_price, vp_vol, spikes_df, layers, tpsl=None):
     show_heat = "Карта" in layers
     show_ema = "EMA" in layers
     show_vwap = "VWAP" in layers
@@ -260,6 +275,20 @@ def build_figure(df, vp_price, vp_vol, spikes_df, layers):
         bgcolor=GOLD, bordercolor=GOLD, borderpad=2,
     )
 
+    # TP/SL* volatility zones — bands of real ATR, labels carry the asterisk
+    if tpsl:
+        fig.add_hrect(y0=tpsl["tp_lo"], y1=tpsl["tp_hi"], row=1, col=1,
+                      fillcolor="rgba(38,208,124,0.12)", line_width=0, layer="below")
+        fig.add_hrect(y0=tpsl["sl_lo"], y1=tpsl["sl_hi"], row=1, col=1,
+                      fillcolor="rgba(255,77,94,0.12)", line_width=0, layer="below")
+        for y, lab, col in ((tpsl["tp_hi"], tpsl["tp_label"], GREEN),
+                            (tpsl["sl_lo"], tpsl["sl_label"], RED)):
+            fig.add_annotation(
+                xref="paper", x=0.985, yref="y", y=y, xanchor="right",
+                yanchor="bottom", showarrow=False, text=lab,
+                font=dict(color=col, size=10.5),
+            )
+
     # brand watermark — rides along in any screenshot or PNG export
     fig.add_annotation(
         xref="paper", yref="paper", x=0.012, y=0.03,
@@ -349,7 +378,28 @@ candles = [{
 } for r in df.itertuples()]
 candles_json = json.dumps(candles, ensure_ascii=False)
 
-fig = build_figure(df, vp_price, vp_vol, spikes_df, layer_sel)
+# --- TP/SL* zones — real volatility (ATR), not a recommendation -------------
+tpsl = None
+if "TP/SL*" in layer_sel:
+    atr = wf.atr_value(df)
+    if atr > 0:
+        if tpsl_dir.startswith("Авто"):
+            long_side = s["alert"]["up"] if s["alert"] else True
+        else:
+            long_side = tpsl_dir == "Лонг"
+        entry = s["last_price"]
+        sign = 1 if long_side else -1
+        tp_c = entry + sign * tp_mult * atr
+        sl_c = entry - sign * sl_mult * atr
+        tpsl = {
+            "long": long_side, "entry": entry, "atr": atr,
+            "tp_lo": tp_c - 0.35 * atr, "tp_hi": tp_c + 0.35 * atr,
+            "sl_lo": sl_c - 0.25 * atr, "sl_hi": sl_c + 0.25 * atr,
+            "tp_label": f"TP* {tp_c:,.0f} · {tp_mult}×ATR",
+            "sl_label": f"SL* {sl_c:,.0f} · {sl_mult}×ATR",
+        }
+
+fig = build_figure(df, vp_price, vp_vol, spikes_df, layer_sel, tpsl)
 plot_div = pio.to_html(fig, include_plotlyjs="cdn", full_html=False,
                        default_width="100%", default_height="720px",
                        config={"displayModeBar": False, "responsive": True,
@@ -753,6 +803,17 @@ overlay_html = f"""
 """
 
 components.html(overlay_html, height=730, scrolling=False)
+
+if tpsl:
+    side_txt = "лонг" if tpsl["long"] else "шорт"
+    st.markdown(f"""
+<div class="bt-note"><b style="color:#9aa6bd">*TP/SL</b> — зоны волатильности,
+посчитанные из реального хода свечей: ATR(14) = {tpsl['atr']:,.1f} на текущем
+интервале; сценарий — {side_txt} от текущей цены ${tpsl['entry']:,.2f}.
+SL ближе ~{sl_mult}×ATR статистически выбивается обычным шумом, TP за пределами
+типичного диапазона. Это <b>статистика волатильности золота, не торговая
+рекомендация</b> и не гарантия исполнения. Настройки — в ⚙ Чувствительность.</div>
+""", unsafe_allow_html=True)
 
 # --- backtest strip — what happened AFTER each whale (descriptive only) -----
 if bt:

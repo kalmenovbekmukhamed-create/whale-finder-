@@ -184,6 +184,22 @@ def _wilson_ci(k, n, z=1.96):
     return (max(0.0, center - half), min(1.0, center + half))
 
 
+def atr_value(df, period=14):
+    """
+    ATR(14) — Average True Range, the standard measure of how far one candle
+    actually travels. TP/SL zones are multiples of this real volatility:
+    a stop inside ~1.5×ATR is statistically likely to be hit by noise alone.
+    """
+    prev = df["close"].shift(1)
+    tr = pd.concat([
+        (df["high"] - df["low"]).abs(),
+        (df["high"] - prev).abs(),
+        (df["low"] - prev).abs(),
+    ], axis=1).max(axis=1)
+    a = tr.rolling(period, min_periods=3).mean().iloc[-1]
+    return float(a) if pd.notna(a) else 0.0
+
+
 WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 
