@@ -18,6 +18,12 @@ from streamlit_autorefresh import st_autorefresh
 
 import data as wf
 
+# self-heal a stale module cache after a deploy: if the running process kept an
+# old copy of data.py in memory, reload it so new functions are available
+if not hasattr(wf, "atr_value"):
+    import importlib
+    wf = importlib.reload(wf)
+
 # ---------------------------------------------------------------- palette ---
 BG        = "#0a0a12"
 PANEL     = "#0d1320"
